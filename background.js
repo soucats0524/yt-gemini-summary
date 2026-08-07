@@ -13,30 +13,44 @@ chrome.runtime.onInstalled.addListener(() => {
 
 // 2. メイン処理のトリガー
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== MENU_ID) return;
-  const videoUrl = info.linkUrl;
+if (info.menuItemId !== MENU_ID) return;
+const videoUrl = info.linkUrl;
+const newTab = await chrome.tabs.create({ url: videoUrl, active: false });
 
-  notify('処理開始', '字幕の抽出を開始します。');
+notify('処理開始', '字幕の抽出を開始します。');
 
-  let tempTabId = null;
-  try {
-    // 3. 非アクティブタブの生成と読み込み待機
-    const tempTab = await chrome.tabs.create({ url: videoUrl, active: false });
-    tempTabId = tempTab.id;
-    await waitForTabLoad(tempTabId);
-
-    // 4. スクリプト注入による字幕取得
-    const injectionResult = await chrome.scripting.executeScript({
-      target: { tabId: tempTabId },
-      world: 'MAIN', // window.ytInitialPlayerResponse にアクセスするために必須
-      func: extractSubtitlesFromPage
+let tempTabId = null;
+try {
+    // タブのロード完了を待機
+    await new Promise((resolve) => {
+      chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
+        if (tabId === newTab.id && changeInfo.status === 'complete') {
+          chrome.tabs.onUpdated.removeListener(listener);
+          tempTabId = tabId;
+          resolve();
+        }
+      });
     });
 
-    const transcript = injectionResult[0].result;
-    if (!transcript) {
-      throw new Error('字幕データが見つかりませんでした。');
+    // ロード完了後にスクリプトを注入
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: newTab.id },
+      world: "MAIN",
+      func: extractSubtitlesFromPage // 定義済みの抽出関数を直接指定
+    });
+
+    const extractionResult = results[0].result;
+    if (!extractionResult || !extractionResult.success) {
+      console.error("字幕データ抽出失敗:", extractionResult?.reason || "不明なエラー");
+      return;
     }
 
+    const transcript = extractionResult.text;
+    if (!results || !transcript) {
+      console.error("字幕データが見つかりませんでした。");
+      return;
+    }
+    
     // 不要になったタブを閉じる
     await chrome.tabs.remove(tempTabId);
     tempTabId = null;
@@ -72,36 +86,64 @@ function waitForTabLoad(tabId) {
   });
 }
 
-// ページコンテキスト（MAIN world）で実行される抽出ロジック
-// 戻り値は呼び出し元の Service Worker に渡される
+// ページコンテキスト（MAIN world）で実行される抽出ロジック（デバッグ強化版）
 async function extractSubtitlesFromPage() {
   try {
     const playerResponse = window.ytInitialPlayerResponse;
-    if (!playerResponse) return null;
+    if (!playerResponse) return { success: false, reason: "window.ytInitialPlayerResponse is undefined." };
 
     const tracks = playerResponse.captions?.playerCaptionsTracklistRenderer?.captionTracks;
-    if (!tracks || tracks.length === 0) return null;
+    if (!tracks || tracks.length === 0) return { success: false, reason: "No caption tracks found." };
 
-    // 最初の字幕（通常は自動生成またはアップロードされたもの）のURLを取得
     const baseUrl = tracks[0].baseUrl;
-    
-    const response = await fetch(baseUrl);
-    const xmlText = await response.text();
+    const response = await fetch(baseUrl, { credentials: 'include' });
+    if (!response.ok) return { success: false, reason: `Fetch failed: ${response.status}` };
 
-    // 簡易的なXMLタグ除去（最小構成のため単純な正規表現を使用）
-    const cleanText = xmlText
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&#39;/g, "'")
-      .replace(/&quot;/g, '"')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const rawText = await response.text();
+    let cleanText = "";
 
-    return cleanText;
+    const trimmedText = rawText.trim();
+    if (trimmedText.startsWith('{') || trimmedText.startsWith('[')) {
+      try {
+        const jsonData = JSON.parse(rawText);
+        const events = jsonData.events || [];
+        cleanText = events
+          .filter(event => event.segs)
+          .map(event => event.segs.map(seg => seg.utf8).join(''))
+          .join(' ')
+          .trim();
+      } catch (e) {
+        return { success: false, reason: `JSON parse error: ${e.message}` };
+      }
+    } else {
+      // XML形式としての処理（タグ名が異なる可能性を考慮し、全体をプレビュー出力できるようにする）
+      const matches = [...rawText.matchAll(/<text[^>]*>(.*?)<\/text>/g)];
+      if (matches.length === 0) {
+        // レスポンスの実態を把握するため、先頭100文字をエラー理由に含めて返却
+        const preview = rawText.slice(0, 100).replace(/\s+/g, ' ');
+        return { success: false, reason: `No <text> elements found. Preview: ${preview}` };
+      }
+
+      cleanText = matches
+        .map(m => m[1])
+        .join(' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&#39;/g, "'")
+        .replace(/&quot;/g, '"')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    if (!cleanText) {
+      return { success: false, reason: "字幕テキストが空です。" };
+    }
+
+    return { success: true, text: cleanText };
   } catch (err) {
-    return null;
+    return { success: false, reason: `Exception: ${err.message}` };
   }
 }
 
