@@ -1,26 +1,21 @@
 {
   "manifest_version": 3,
   "name": "yt-gemini-scribe",
-  "version": "0.1.1",
-  "description": "YouTubeの動画リンクから字幕を抽出し、Gemini APIで要約してMarkdownとして保存する",
-  "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
-  },
+  "version": "1.0.0",
+  "description": "YouTubeの字幕をPython経由で取得しGeminiで要約する",
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "permissions": [
-    "contextMenus",
-    "tabs",
+    "activeTab",
     "scripting",
+    "contextMenus",
+    "storage",
     "downloads",
-    "notifications"
+    "nativeMessaging"
   ],
   "host_permissions": [
-    "https://*.youtube.com/*",
-    "https://generativelanguage.googleapis.com/*"
+    "https://*.youtube.com/*"
   ]
 }
