@@ -1,9 +1,0 @@
-{
-  "name": "com.yt_gemini_scribe.host",
-  "description": "YouTube Transcript Host",
-  "path": "C:\\Users\\souca\\yt-gemini-scribe\\host.bat", 
-  "type": "stdio",
-  "allowed_origins": [
-    "chrome-extension://ajgfnpcchncopmcicmacpcnkafnhfdje/"
-  ]
-}

@@ -1,0 +1,9 @@
+{
+  "name": "com.yt_gemini_summary.host",
+  "description": "YouTube Gemini Summary Host",
+  "path": "C:\\Users\\souca\\yt-gemini-summary\\host.bat", 
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://ajgfnpcchncopmcicmacpcnkafnhfdje/"
+  ]
+}

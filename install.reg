@@ -1,4 +1,4 @@
 Windows Registry Editor Version 5.00
 
-[HKEY_CURRENT_USER\Software\Google\Chrome\NativeMessagingHosts\com.yt_gemini_scribe.host]
-@="C:\\Users\\souca\\yt-gemini-scribe\\com.yt_gemini_scribe.host.json"
+[HKEY_CURRENT_USER\Software\Google\Chrome\NativeMessagingHosts\com.yt_gemini_summary.host]
+@="C:\\Users\\souca\\yt-gemini-summary\\com.yt_gemini_summary.host.json"

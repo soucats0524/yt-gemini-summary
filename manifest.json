@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "yt-gemini-scribe",
+  "name": "yt-gemini-summary",
   "version": "1.0.0",
   "description": "YouTubeの字幕をPython経由で取得しGeminiで要約する",
   "icons": {

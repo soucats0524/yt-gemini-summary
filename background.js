@@ -1,12 +1,12 @@
 import { GEMINI_API_KEY } from './config.js';
 
-const HOST_NAME = "com.yt_gemini_scribe.host";
+const HOST_NAME = "com.yt_gemini_summary.host";
 
 // コンテキストメニューの初期化
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
-    id: "yt-gemini-scribe-menu",
-    title: "この動画リンクをGeminiで要約",
+    id: "yt-gemini-summary-menu",
+    title: "この動画をGeminiで要約",
     contexts: ["page", "link"],
     // トップページ（おすすめ一覧）等でもメニューを表示させるため条件を緩和
     documentUrlPatterns: ["https://www.youtube.com/*"]
@@ -15,7 +15,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 // メイン処理のトリガー
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === "yt-gemini-scribe-menu") {
+  if (info.menuItemId === "yt-gemini-summary-menu") {
     try {
       // リンク上での右クリック時は linkUrl、動画ページ上での右クリック時は pageUrl を取得
       const targetUrl = info.linkUrl || info.pageUrl;
