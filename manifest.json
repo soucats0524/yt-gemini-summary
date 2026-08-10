@@ -3,6 +3,11 @@
   "name": "yt-gemini-scribe",
   "version": "1.0.0",
   "description": "YouTubeの字幕をPython経由で取得しGeminiで要約する",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "background": {
     "service_worker": "background.js",
     "type": "module"

@@ -2,31 +2,36 @@ import { GEMINI_API_KEY } from './config.js';
 
 const HOST_NAME = "com.yt_gemini_scribe.host";
 
+// コンテキストメニューの初期化
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "yt-gemini-scribe-menu",
-    title: "この動画の字幕をGeminiで要約",
+    title: "この動画リンクをGeminiで要約",
     contexts: ["page", "link"],
-    documentUrlPatterns: ["https://www.youtube.com/watch*"]
+    // トップページ（おすすめ一覧）等でもメニューを表示させるため条件を緩和
+    documentUrlPatterns: ["https://www.youtube.com/*"]
   });
 });
 
+// メイン処理のトリガー
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === "yt-gemini-scribe-menu" && tab.id) {
+  if (info.menuItemId === "yt-gemini-scribe-menu") {
     try {
-      // 1. メタデータの取得 (ページコンテキストで実行)
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        world: "MAIN",
-        func: extractMetadata
-      });
+      // リンク上での右クリック時は linkUrl、動画ページ上での右クリック時は pageUrl を取得
+      const targetUrl = info.linkUrl || info.pageUrl;
 
-      const videoData = results[0]?.result;
-      if (!videoData) throw new Error("メタデータの抽出に失敗した。");
+      if (!targetUrl || (!targetUrl.includes('watch?v=') && !targetUrl.includes('youtu.be/'))) {
+        throw new Error("有効なYouTubeの動画リンクではない。");
+      }
 
-      // 2. Pythonスクリプトへの通信 (Native Messaging)
+      console.log("動画メタデータを取得中:", targetUrl);
+      
+      // 1. メタデータの取得 (バックグラウンドでHTMLフェッチ)
+      const videoData = await fetchMetadataFromHtml(targetUrl);
+
+      // 2. Pythonホストへの通信 (Native Messaging)
       console.log("Pythonホストへ字幕取得を要求中...");
-      const hostResponse = await chrome.runtime.sendNativeMessage(HOST_NAME, { url: videoData.url });
+      const hostResponse = await chrome.runtime.sendNativeMessage(HOST_NAME, { url: targetUrl });
 
       if (!hostResponse || !hostResponse.success) {
         throw new Error(hostResponse?.error || "Pythonホストでの字幕取得に失敗した。");
@@ -44,16 +49,30 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
-// メタデータのみを取得する関数 (字幕抽出処理は除外)
-async function extractMetadata() {
-  const playerResponse = window.ytInitialPlayerResponse || 
-                         JSON.parse(document.querySelector('script#ytInitialPlayerResponse')?.textContent || '{}');
-  const details = playerResponse.videoDetails || {};
+// --- メタデータ抽出ロジック（DOM非依存） ---
+async function fetchMetadataFromHtml(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`動画ページの取得に失敗した (HTTP ${response.status})`);
+  }
+  const html = await response.text();
+
+  // OGPタグ（Open Graph Protocol）からメタデータを正規表現で抽出
+  const titleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i) || html.match(/<meta\s+name="title"\s+content="([^"]+)"/i);
+  const descMatch = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i) || html.match(/<meta\s+name="description"\s+content="([^"]+)"/i);
+  const thumbMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
+
+  // HTMLエンティティ（&amp; 等）をデコード
+  const decodeEntities = (str) => {
+     if (!str) return "";
+     return str.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  };
+
   return {
-    title: details.title || document.title.replace(/ - YouTube$/, ''),
-    description: details.shortDescription || "",
-    thumbnail: details.thumbnail?.thumbnails?.pop()?.url || "",
-    url: window.location.href
+    title: decodeEntities(titleMatch ? titleMatch[1] : "Unknown Title"),
+    description: decodeEntities(descMatch ? descMatch[1] : ""),
+    thumbnail: thumbMatch ? thumbMatch[1] : "",
+    url: url
   };
 }
 
